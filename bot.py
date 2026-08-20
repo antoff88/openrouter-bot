@@ -1,8 +1,9 @@
 import requests
 import os
 import logging
+import http.server
+import socketserver
 import threading
-from flask import Flask
 from telegram import Update, InlineKeyboardButton, InlineKeyboardMarkup
 from telegram.ext import ApplicationBuilder, MessageHandler, filters, CommandHandler, CallbackQueryHandler
 
@@ -26,7 +27,7 @@ current_personality = "tarelka1"
 logging.basicConfig(level=logging.INFO, format='%(asctime)s - %(levelname)s - %(message)s')
 logger = logging.getLogger(__name__)
 
-# ===== ЛИЧНОСТИ (сокращено для экономии места) =====
+# ===== ЛИЧНОСТИ =====
 PERSONALITIES = {
     "tarelka1": {
         "name": "Аня — Классическая тарелочница",
@@ -61,7 +62,6 @@ def ask_ai(question, model_id, personality_key):
         "X-Title": "OpenRouter Bot",
         "Content-Type": "application/json"
     }
-
     data = {
         "model": model_id,
         "messages": [
@@ -91,7 +91,6 @@ async def start(update, context):
     if not is_authorized(update):
         await update.message.reply_text("⛔ Ты не мой хозяин. Пшел нахуй.")
         return
-
     await update.message.reply_text(
         f"👋 Привет, хозяин!\n\n"
         f"Текущая личность: **{PERSONALITIES[current_personality]['name']}**\n"
@@ -103,7 +102,6 @@ async def help_command(update, context):
     if not is_authorized(update):
         await update.message.reply_text("⛔ Ты не мой хозяин. Пшел нахуй.")
         return
-
     help_text = """
 🤖 **Команды бота**
 
@@ -136,11 +134,9 @@ async def help_command(update, context):
 async def personality(update, context):
     if not is_authorized(update):
         return
-
     keyboard = []
     for key, val in PERSONALITIES.items():
         keyboard.append([InlineKeyboardButton(val["name"], callback_data=f"personality_{key}")])
-
     await update.message.reply_text(
         "🎭 Выбери личность:",
         reply_markup=InlineKeyboardMarkup(keyboard)
@@ -149,11 +145,9 @@ async def personality(update, context):
 async def model(update, context):
     if not is_authorized(update):
         return
-
     keyboard = []
     for m in MODELS:
         keyboard.append([InlineKeyboardButton(m["name"], callback_data=f"set_model_{m['id']}")])
-
     await update.message.reply_text(
         "🧠 Выбери модель:",
         reply_markup=InlineKeyboardMarkup(keyboard)
@@ -196,38 +190,32 @@ async def handle_message(update, context):
     if not is_authorized(update):
         await update.message.reply_text("⛔ Ты не мой хозяин. Пшел нахуй.")
         return
-
     global current_model, current_personality
     user_name = update.message.from_user.first_name
     user_text = update.message.text
     chat_type = update.effective_chat.type
     logger.info(f"{user_name} [chat: {chat_type}, personality: {current_personality}]: {user_text}")
-
     await update.message.reply_text("🤔 Думаю...")
-
     for model in MODELS:
         answer = ask_ai(user_text, model["id"], current_personality)
         if answer is not None:
             current_model = model["id"]
             await update.message.reply_text(answer)
             return
-
     await update.message.reply_text(
         "⛔ Все модели временно недоступны.\n\n"
         "Попробуй позже или проверь API-ключ OpenRouter."
     )
 
-# ===== ЗАГЛУШКА ДЛЯ ПОРТА (чтобы Render не падал) =====
-flask_app = Flask(__name__)
+# ===== ЗАГЛУШКА ДЛЯ ПОРТА (без Flask) =====
+PORT = 8080
+Handler = http.server.SimpleHTTPRequestHandler
 
-@flask_app.route('/')
-def health():
-    return "Bot is running!"
+def run_http_server():
+    with socketserver.TCPServer(("", PORT), Handler) as httpd:
+        httpd.serve_forever()
 
-def run_flask():
-    flask_app.run(host='0.0.0.0', port=8080, debug=False, use_reloader=False)
-
-threading.Thread(target=run_flask, daemon=True).start()
+threading.Thread(target=run_http_server, daemon=True).start()
 
 # ===== ЗАПУСК =====
 if __name__ == "__main__":
@@ -239,6 +227,5 @@ if __name__ == "__main__":
     app.add_handler(CallbackQueryHandler(set_personality, pattern="^personality_"))
     app.add_handler(CallbackQueryHandler(set_model, pattern="^set_model_"))
     app.add_handler(MessageHandler(filters.TEXT & ~filters.COMMAND, handle_message))
-
     logger.info("🚀 Бот с множеством личностей запущен!")
     app.run_polling()
