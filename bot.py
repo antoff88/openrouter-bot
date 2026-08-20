@@ -7,9 +7,8 @@ from telegram.ext import ApplicationBuilder, MessageHandler, filters, CommandHan
 TELEGRAM_TOKEN = os.getenv("TELEGRAM_TOKEN")
 OPENROUTER_KEY = os.getenv("OPENROUTER_KEY")
 
-# ===== ТВОЙ ID В TELEGRAM (только ты можешь пользоваться ботом) =====
-# Чтобы узнать свой ID: напиши боту @userinfobot
-AUTHORIZED_USER_ID = 1094998770  # ЗАМЕНИ НА СВОЙ ID
+# ===== ТВОЙ ID =====
+AUTHORIZED_USER_ID = 1094998770
 
 MODELS = [
     {"name": "Nemotron 3 Nano", "id": "nvidia/nemotron-3-nano-30b-a3b:free"},
@@ -25,7 +24,7 @@ current_personality = "tarelka1"
 logging.basicConfig(level=logging.INFO, format='%(asctime)s - %(levelname)s - %(message)s')
 logger = logging.getLogger(__name__)
 
-# ===== ЛИЧНОСТИ (ПРОМПТЫ) =====
+# ===== ЛИЧНОСТИ =====
 
 PERSONALITIES = {
     "tarelka1": {
@@ -71,7 +70,7 @@ PERSONALITIES = {
 """
     },
     "hater": {
-        "name": "Петя — Мужик, который осуждает тарелочниц",
+        "name": "Петя — Мужик, осуждающий тарелочниц",
         "prompt": """
 Ты — Петя, 35 лет. Ты адекватный мужик, который осуждает тарелочниц и РСП.
 Ты считаешь, что женщины, которые используют детей и красоту для вымогательства денег — это позор.
@@ -135,40 +134,61 @@ def ask_ai(question, model_id, personality_key):
         logger.error(f"OpenRouter exception: {e}")
         return None
 
-# ===== ПРОВЕРКА АВТОРИЗАЦИИ =====
 def is_authorized(update):
-    return update.effective_user.id == AUTHORIZED_USER_ID
+    # В личке — только хозяин
+    if update.effective_chat.type == "private":
+        return update.effective_user.id == AUTHORIZED_USER_ID
+    # В группе — все
+    return True
+
+# ===== КОМАНДЫ =====
 
 async def start(update, context):
     if not is_authorized(update):
         await update.message.reply_text("⛔ Ты не мой хозяин. Пшел нахуй.")
         return
     
-    global current_personality
+    await update.message.reply_text(
+        f"👋 Привет, хозяин!\n\n"
+        f"Текущая личность: **{PERSONALITIES[current_personality]['name']}**\n"
+        f"Текущая модель: **{current_model}**\n\n"
+        f"Чтобы сменить личность — напиши /personality\n"
+        f"Чтобы сменить модель — напиши /model\n"
+        f"Просто пиши — я отвечу 😎"
+    )
+
+async def personality(update, context):
+    if not is_authorized(update):
+        return
+    
     keyboard = []
     for key, val in PERSONALITIES.items():
         keyboard.append([InlineKeyboardButton(val["name"], callback_data=f"personality_{key}")])
-    keyboard.append([InlineKeyboardButton("🧠 Сменить модель", callback_data="change_model")])
-    keyboard.append([InlineKeyboardButton("ℹ️ Текущая модель", callback_data="show_model")])
     
-    reply_markup = InlineKeyboardMarkup(keyboard)
-    
-    current_name = PERSONALITIES.get(current_personality, PERSONALITIES["tarelka1"])["name"]
     await update.message.reply_text(
-        f"👋 Привет, хозяин!\n\n"
-        f"Текущая личность: **{current_name}**\n"
-        f"Текущая модель: **{current_model}**\n\n"
-        f"Выбери личность из меню ниже или просто напиши мне 😎",
-        reply_markup=reply_markup
+        "🎭 Выбери личность:",
+        reply_markup=InlineKeyboardMarkup(keyboard)
     )
 
 async def model(update, context):
     if not is_authorized(update):
         return
-    await update.message.reply_text(f"🧠 Текущая модель: {current_model}")
+    
+    keyboard = []
+    for m in MODELS:
+        keyboard.append([InlineKeyboardButton(m["name"], callback_data=f"set_model_{m['id']}")])
+    
+    await update.message.reply_text(
+        "🧠 Выбери модель:",
+        reply_markup=InlineKeyboardMarkup(keyboard)
+    )
+
+# ===== КОЛБЭКИ =====
 
 async def set_personality(update, context):
     if not is_authorized(update):
+        await update.callback_query.answer()
+        await update.callback_query.edit_message_text("⛔ Ты не мой хозяин. Пшел нахуй.")
         return
     global current_personality
     query = update.callback_query
@@ -181,43 +201,23 @@ async def set_personality(update, context):
         f"Теперь я буду отвечать в этом стиле. Пиши что угодно."
     )
 
-async def show_model(update, context):
-    if not is_authorized(update):
-        return
-    query = update.callback_query
-    await query.answer()
-    await query.edit_message_text(
-        f"🧠 Текущая модель: {current_model}\n\n"
-        f"Текущая личность: {PERSONALITIES[current_personality]['name']}",
-        reply_markup=InlineKeyboardMarkup([
-            [InlineKeyboardButton("🔄 Сменить модель", callback_data="change_model")]
-        ])
-    )
-
-async def change_model(update, context):
-    if not is_authorized(update):
-        return
-    query = update.callback_query
-    await query.answer()
-    keyboard = []
-    for m in MODELS:
-        keyboard.append([InlineKeyboardButton(m["name"], callback_data=f"set_model_{m['id']}")])
-    await query.edit_message_text(
-        "Выбери модель:",
-        reply_markup=InlineKeyboardMarkup(keyboard)
-    )
-
 async def set_model(update, context):
     if not is_authorized(update):
+        await update.callback_query.answer()
+        await update.callback_query.edit_message_text("⛔ Ты не мой хозяин. Пшел нахуй.")
         return
     global current_model
     query = update.callback_query
     await query.answer()
     model_id = query.data.replace("set_model_", "")
     current_model = model_id
-    await query.edit_message_text(f"✅ Модель изменена на: {model_id}\n\nТеперь пиши что угодно.")
+    await query.edit_message_text(
+        f"✅ Модель изменена на: {model_id}\n\n"
+        f"Теперь пиши что угодно."
+    )
 
 async def handle_message(update, context):
+    # Проверка авторизации
     if not is_authorized(update):
         await update.message.reply_text("⛔ Ты не мой хозяин. Пшел нахуй.")
         return
@@ -225,7 +225,8 @@ async def handle_message(update, context):
     global current_model, current_personality
     user_name = update.message.from_user.first_name
     user_text = update.message.text
-    logger.info(f"{user_name} [personality: {current_personality}]: {user_text}")
+    chat_type = update.effective_chat.type
+    logger.info(f"{user_name} [chat: {chat_type}, personality: {current_personality}]: {user_text}")
     
     await update.message.reply_text("🤔 Думаю...")
     
@@ -244,10 +245,9 @@ async def handle_message(update, context):
 if __name__ == "__main__":
     app = ApplicationBuilder().token(TELEGRAM_TOKEN).build()
     app.add_handler(CommandHandler("start", start))
+    app.add_handler(CommandHandler("personality", personality))
     app.add_handler(CommandHandler("model", model))
     app.add_handler(CallbackQueryHandler(set_personality, pattern="^personality_"))
-    app.add_handler(CallbackQueryHandler(show_model, pattern="^show_model$"))
-    app.add_handler(CallbackQueryHandler(change_model, pattern="^change_model$"))
     app.add_handler(CallbackQueryHandler(set_model, pattern="^set_model_"))
     app.add_handler(MessageHandler(filters.TEXT & ~filters.COMMAND, handle_message))
     
