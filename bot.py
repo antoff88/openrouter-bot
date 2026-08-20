@@ -4,6 +4,8 @@ import logging
 import http.server
 import socketserver
 import threading
+import signal
+import sys
 from telegram import Update, InlineKeyboardButton, InlineKeyboardMarkup
 from telegram.ext import ApplicationBuilder, MessageHandler, filters, CommandHandler, CallbackQueryHandler
 
@@ -207,15 +209,34 @@ async def handle_message(update, context):
         "Попробуй позже или проверь API-ключ OpenRouter."
     )
 
-# ===== ЗАГЛУШКА ДЛЯ ПОРТА (без Flask) =====
-PORT = 8080
-Handler = http.server.SimpleHTTPRequestHandler
+# ===== ЗАГЛУШКА ДЛЯ ПОРТА (Health Check) =====
+class HealthCheckHandler(http.server.SimpleHTTPRequestHandler):
+    def do_GET(self):
+        if self.path == '/':
+            self.send_response(200)
+            self.end_headers()
+            self.wfile.write(b'OK')
+        elif self.path == '/health':
+            self.send_response(200)
+            self.end_headers()
+            self.wfile.write(b'OK')
+        else:
+            self.send_response(404)
+            self.end_headers()
 
 def run_http_server():
-    with socketserver.TCPServer(("", PORT), Handler) as httpd:
+    with socketserver.TCPServer(("", 8080), HealthCheckHandler) as httpd:
         httpd.serve_forever()
 
 threading.Thread(target=run_http_server, daemon=True).start()
+
+# ===== ОБРАБОТКА СИГНАЛОВ =====
+def signal_handler(sig, frame):
+    logger.info("Получен сигнал остановки, завершаю работу...")
+    sys.exit(0)
+
+signal.signal(signal.SIGINT, signal_handler)
+signal.signal(signal.SIGTERM, signal_handler)
 
 # ===== ЗАПУСК =====
 if __name__ == "__main__":
