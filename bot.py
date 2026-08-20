@@ -8,7 +8,7 @@ TELEGRAM_TOKEN = os.getenv("TELEGRAM_TOKEN")
 OPENROUTER_KEY = os.getenv("OPENROUTER_KEY")
 
 # ===== ТВОЙ ID =====
-AUTHORIZED_USER_ID = 1094998770
+AUTHORIZED_USER_ID = 1094998770  # ЗАМЕНИ НА СВОЙ ID
 
 MODELS = [
     {"name": "Nemotron 3 Nano", "id": "nvidia/nemotron-3-nano-30b-a3b:free"},
@@ -135,10 +135,8 @@ def ask_ai(question, model_id, personality_key):
         return None
 
 def is_authorized(update):
-    # В личке — только хозяин
     if update.effective_chat.type == "private":
         return update.effective_user.id == AUTHORIZED_USER_ID
-    # В группе — все
     return True
 
 # ===== КОМАНДЫ =====
@@ -152,10 +150,42 @@ async def start(update, context):
         f"👋 Привет, хозяин!\n\n"
         f"Текущая личность: **{PERSONALITIES[current_personality]['name']}**\n"
         f"Текущая модель: **{current_model}**\n\n"
-        f"Чтобы сменить личность — напиши /personality\n"
-        f"Чтобы сменить модель — напиши /model\n"
-        f"Просто пиши — я отвечу 😎"
+        f"Напиши /help чтобы увидеть все команды."
     )
+
+async def help_command(update, context):
+    if not is_authorized(update):
+        await update.message.reply_text("⛔ Ты не мой хозяин. Пшел нахуй.")
+        return
+    
+    help_text = """
+🤖 **Команды бота**
+
+/start — Показать текущую личность и модель
+
+/personality — Сменить личность (тарелочница, стерва, оппозиционер и т.д.)
+
+/model — Сменить модель ИИ
+
+/help — Показать это сообщение
+
+Просто пиши мне что угодно — я отвечу в выбранной роли 😎
+
+📌 **Личности:**
+• Аня — Классическая тарелочница (просит подарки и рестораны)
+• Кристина — Дерзкая стерва (требует, указывает)
+• Оля — Душа компании (зовёт всех на тусовку)
+• Петя — Мужик, осуждающий тарелочниц (жёсткий, мат)
+• Сергей — Против власти (политика, критика)
+
+📌 **Модели:**
+• Nemotron 3 Nano
+• Nemotron 3 Super
+• Nemotron 3.5 Lightning
+• GLM 5.2
+• Gemma 4 31B
+"""
+    await update.message.reply_text(help_text, parse_mode="Markdown")
 
 async def personality(update, context):
     if not is_authorized(update):
@@ -217,7 +247,6 @@ async def set_model(update, context):
     )
 
 async def handle_message(update, context):
-    # Проверка авторизации
     if not is_authorized(update):
         await update.message.reply_text("⛔ Ты не мой хозяин. Пшел нахуй.")
         return
@@ -245,6 +274,7 @@ async def handle_message(update, context):
 if __name__ == "__main__":
     app = ApplicationBuilder().token(TELEGRAM_TOKEN).build()
     app.add_handler(CommandHandler("start", start))
+    app.add_handler(CommandHandler("help", help_command))
     app.add_handler(CommandHandler("personality", personality))
     app.add_handler(CommandHandler("model", model))
     app.add_handler(CallbackQueryHandler(set_personality, pattern="^personality_"))
