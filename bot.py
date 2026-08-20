@@ -4,19 +4,15 @@ import logging
 from telegram import Update, InlineKeyboardButton, InlineKeyboardMarkup
 from telegram.ext import ApplicationBuilder, MessageHandler, filters, CommandHandler, CallbackQueryHandler
 
-# ===== ТОКЕНЫ =====
 TELEGRAM_TOKEN = os.getenv("TELEGRAM_TOKEN")
 OPENROUTER_KEY = os.getenv("OPENROUTER_KEY")
 
-# ===== СПИСОК РАБОЧИХ БЕСПЛАТНЫХ МОДЕЛЕЙ (из твоего лога) =====
+# ===== ТОЛЬКО РАБОЧИЕ МОДЕЛИ (из твоего curl) =====
 MODELS = [
     {"name": "Nemotron 3 Nano", "id": "nvidia/nemotron-3-nano-30b-a3b:free"},
     {"name": "Nemotron 3 Super", "id": "nvidia/nemotron-3-super-120b-a12b:free"},
-    {"name": "Nemotron 3 Nano Omni", "id": "nvidia/nemotron-3-nano-omni-30b-a3b-reasoning:free"},
+    {"name": "Nemotron 3.5 Lightning", "id": "nvidia/nemotron-3.5-lightning:free"},
     {"name": "GLM 5.2", "id": "z-ai/glm-5.2:free"},
-    {"name": "Laguna XS 2.1", "id": "poolside/laguna-xs-2.1:free"},
-    {"name": "LFM2.5", "id": "liquid/lfm-2.5-2.6b:free"},
-    {"name": "Gemma 4 26B", "id": "google/gemma-4-26b-a4b-it:free"},
     {"name": "Gemma 4 31B", "id": "google/gemma-4-31b-it:free"},
 ]
 
@@ -36,7 +32,7 @@ def ask_ai(question, model_id):
     data = {
         "model": model_id,
         "messages": [
-            {"role": "system", "content": "Ты — дерзкий собеседник. Отвечай коротко, с юмором, иногда матом. Без воды. Максимум 2-3 предложения."},
+            {"role": "system", "content": "Ты — дерзкий собеседник. Отвечай коротко, с юмором, иногда матом. Без воды."},
             {"role": "user", "content": question}
         ]
     }
@@ -101,10 +97,7 @@ async def handle_message(update, context):
     
     await update.message.reply_text("🤔 Думаю...")
     
-    # Пробуем все модели по очереди
-    tried_models = []
     for model in MODELS:
-        tried_models.append(model["name"])
         answer = ask_ai(user_text, model["id"])
         if answer is not None:
             current_model = model["id"]
@@ -112,8 +105,7 @@ async def handle_message(update, context):
             return
     
     await update.message.reply_text(
-        "⛔ Все модели временно недоступны.\n"
-        f"Проверено: {', '.join(tried_models)}\n\n"
+        "⛔ Все модели временно недоступны.\n\n"
         "Попробуй позже или проверь API-ключ OpenRouter."
     )
 
