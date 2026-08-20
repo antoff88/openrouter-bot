@@ -6,6 +6,6 @@ services:
     startCommand: python bot.py
     envVars:
       - key: TELEGRAM_TOKEN
-        value: 8958751620:AAGpuspg7vSen5vS3xO1JRFmJO5HBFiQ6tA
+        sync: false
       - key: OPENROUTER_KEY
-        value: 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
+        sync: false
